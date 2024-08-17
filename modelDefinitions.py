@@ -9,24 +9,21 @@ import math
 
 #support method unrelated to the actual model. Will return batch_size, a, b from a,b
 #also turns dataframes into tensors
+
 def fixup_data(data, batch_size, targetColumn, trainPercent):
-    assert data.shape[0] % batch_size == 0
-    
-    #TODO: rewrite this first section to make it more efficient (get column index from input text, so you don't have to convert x and y to tensor seperately)
-    x = data.drop(targetColumn, axis = 1)
-    y = data[targetColumn]                      #split up data into target column, and remove that target column from the data
-    
-    
+    data = data.apply(lambda iterator: ((iterator.max() - iterator)/(iterator.max() - iterator.min())).round(2))
+    x = data.drop(targetColumn, axis=1)
+    y = data[targetColumn]
+
     x = torch.tensor(x.values)
     y = torch.tensor(y.values)
 
-    x = torch.reshape(x, (batch_size, data.shape[1]-1, -1))
-    y = torch.reshape(y, (batch_size, 1, -1)) 
+    total_samples = data.shape[0]
+    # No reshaping here, just batching later during training
+    (x_train, x_test) = torch.split(x, int(trainPercent/100 * total_samples))
+    (y_train, y_test) = torch.split(y, int(trainPercent/100 * total_samples))
 
-    (x_train, x_test) = torch.split(x, round(trainPercent/100 * batch_size))   
-    (y_train, y_test) = torch.split(y, round(trainPercent/100 * batch_size))
     return x_train, y_train, x_test, y_test
-
 
 
 class layer():
@@ -39,6 +36,7 @@ class layer():
         self.bias = self.bias.to(dtype = torch.double)
         self.inputs = torch.tensor(inputs[0]).to(dtype = torch.double)      #TODO: fix inputs growing to inf at some point 
         
+        #print("Weights average: ",self.weights.mean())
         output = torch.matmul(self.inputs, self.weights) + self.bias
         return output
         
@@ -110,20 +108,15 @@ class FCN:
 
     def addLayer(self, layer):
         self.layersList.append(layer)
-        pass
     
     def forward(self, input):
         layerInput = input
-        for layerNum, layer in enumerate(self.layersList):
+        for layer in self.layersList:
             layerInput = layer.forward(layerInput)
-
-        output = layerInput
-
-        return output
+        return layerInput
     
     def backward(self, loss_grad, lr):
         layer_grad = loss_grad
-        
         for layer in reversed(self.layersList):
             layer_grad = layer.backward(layer_grad, lr)
 
@@ -132,7 +125,6 @@ def predictAirlinePriceFromIndex(network, df, idx):
     row = df.loc[idx]
     row = row.drop("fare_low")
     row = torch.tensor(row).unsqueeze(0)
-    print(row)
     price = network.forward(row)
     return price
 
