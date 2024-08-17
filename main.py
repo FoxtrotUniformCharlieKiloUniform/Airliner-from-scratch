@@ -5,56 +5,52 @@ import supporting_cast as sc
 import math
 import modelDefinitions
 
-
-#in this dataframe, we have a couple variables of interest, all of which are regressive.
-#so we have tabular, non timeseries style data. 
-
-#For now, this is just going to be a shrimple X layer fully connected deep neural network. To define a layer, need a bunch of nodes (obviously)
-#as per https://hastie.su.domains/Papers/ESLII.pdf
-
-#variable definitions
-batch_size = 64
-epochs = 2
-trainPercent = 90       #percent of data we will be using for training
-learning_rate = 0.01
+# Variable definitions
+batch_size = 64  # Thiais now flexible
+epochs = 10
+trainPercent = 90
+learning_rate = 0.0001
 prediction_idx = 2616
 
-number_of_training_examples = round(trainPercent/100 * batch_size)
-
-#final data preprocessing before model
+# Data preprocessing
 df = sc.airlineSimplified
-df.drop(["airportid_1", "airportid_2"], axis = 1, inplace = True)
+df.drop(["airportid_1", "airportid_2"], axis=1, inplace=True)
 
-x_train, y_train, x_test, y_test = modelDefinitions.fixup_data(df, batch_size, "fare_low",trainPercent)
+x_train, y_train, x_test, y_test = modelDefinitions.fixup_data(df, batch_size, "fare_low", trainPercent)
 
-outputSize = y_train.shape[-1]
+input_size = x_train.shape[1]  # Determine the input size dynamically
+output_size = 1  # Assuming predicting a single value
 
-#defining model
+# Defining model
 network = modelDefinitions.FCN()
-fc1 = modelDefinitions.layer(152 * 7, 250)
+fc1 = modelDefinitions.layer(input_size, 250)
+#midNL = modelDefinitions.nonLinearity("relu")
 fc2 = modelDefinitions.layer(250, 200)
-#nonlinearLayer = modelDefinitions.nonLinearity("relu")
-fc3 = modelDefinitions.layer(200, 152)
+#midNL = modelDefinitions.nonLinearity("relu")
+fc3 = modelDefinitions.layer(200, output_size)
+#midSig = modelDefinitions.nonLinearity("sigmoid")
 
 network.addLayer(fc1)
+#network.addLayer(midNL)
 network.addLayer(fc2)
-#network.addLayer(nonlinearLayer)
 network.addLayer(fc3)
 
+# Training loop
 for epoch in range(epochs):
-    print(f"Epoch {epoch+1} / {epochs}")
-    for batch in range(number_of_training_examples - 1):
-        x_train_i = x_train[batch].flatten().unsqueeze(0)     #remove batch, reduce size to "a" column vectors        (where a is the amount of data we choose to pass in, like market share or passengers or whatever)
-        y_train_i = y_train[batch]#.unsqueeze(0)     #remove batch, reduce size to one column vector
-
-        #model actuation
-        outputs = network.forward(x_train_i)
-        loss = modelDefinitions.mean_absolute_error(y_train_i, outputs)
-        dLoss = modelDefinitions.mean_absolute_derivative(y_train_i, outputs)
+    num_batches = x_train.shape[0] // batch_size
+    
+    for i in range(0, x_train.shape[0], batch_size):
+        x_batch = x_train[i:i+batch_size]
+        y_batch = y_train[i:i+batch_size]
+        
+        outputs = network.forward(x_batch)
+        loss = modelDefinitions.mean_absolute_error(y_batch, outputs)
+        dLoss = modelDefinitions.mean_absolute_derivative(y_batch, outputs)
 
         grad = network.backward(dLoss, learning_rate)
 
+    print(f"Epoch {epoch+1} / {epochs}")
 
-#pricePrediction = modelDefinitions.predictAirlinePriceFromIndex(network = network, df = df, idx = prediction_idx)
+pricePrediction = modelDefinitions.predictAirlinePriceFromIndex(network = network, df = df, idx = prediction_idx)
 
-#print(f"Predicted price for index of {prediction_idx} is {pricePrediction}")
+print(f"Predicted price for index of {prediction_idx} is {pricePrediction}")
